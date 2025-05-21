@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AFIP RCEL - Agenda de CUITs
 // @namespace    https://github.com/jajandio/Agenda-AFIP
-// @version      0.3
-// @description  Guarda, recupera y ahora también permite borrar contactos (CUIT + datos) en la pantalla “Datos del Receptor (Paso 2)” de RCEL (Factura C) de AFIP.
+// @version      0.4
+// @description  Guarda, recupera y gestiona contactos (CUIT + datos) en RCEL – Factura C (Datos del Receptor, Paso 2) de AFIP, con los botones de acción en una línea separada bajo el selector.
 // @author       Tú
 // @match        https://*.afip.gob.ar/*genComDatosReceptor*
 // @grant        GM_getValue
@@ -15,17 +15,17 @@
 (function () {
   'use strict';
 
-  /* ---------- Almacenamiento ---------- */
+  /* ——— Almacenamiento ——— */
   const KEY = 'afipAgendaReceptores';
-  const getAgenda = () => GM_getValue(KEY, {});          // { cuit: {cuit, alias, razon, domicilio} }
-  const saveAgenda = (a) => GM_setValue(KEY, a);
+  const getAgenda = () => GM_getValue(KEY, {});
+  const saveAgenda = a => GM_setValue(KEY, a);
 
-  /* ---------- Referencias en el DOM de AFIP ---------- */
-  const inputCUIT   = document.querySelector('#nrodocreceptor');
-  const inputRazon  = document.querySelector('#razonsocialreceptor');
-  const comboDom    = document.querySelector('#domicilioreceptorcombo');
+  /* ——— Referencias DOM ——— */
+  const inputCUIT  = document.querySelector('#nrodocreceptor');
+  const inputRazon = document.querySelector('#razonsocialreceptor');
+  const comboDom   = document.querySelector('#domicilioreceptorcombo');
 
-  /* ---------- UI principal (select + botones) ---------- */
+  /* ——— Crear elementos UI ——— */
   const selectAgenda = document.createElement('select');
   selectAgenda.id = 'agendaReceptores';
   selectAgenda.className = 'jig_readonly';
@@ -34,26 +34,37 @@
   const btnSave = document.createElement('button');
   btnSave.textContent = 'Guardar contacto';
   btnSave.type = 'button';
-  btnSave.style.marginLeft = '8px';
 
   const btnAdmin = document.createElement('button');
   btnAdmin.textContent = 'Administrar agenda';
   btnAdmin.type = 'button';
-  btnAdmin.style.marginLeft = '8px';
 
-  const contenedor = document.createElement('div');
-  contenedor.style.display = 'flex';
-  contenedor.style.alignItems = 'center';
-  contenedor.append(selectAgenda, btnSave, btnAdmin);
+  // Contenedor principal en columna
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.alignItems = 'flex-start';
+  wrapper.style.gap = '6px';
 
-  /* ---------- Inserción en la tabla de AFIP ---------- */
+  // Línea de selector
+  wrapper.appendChild(selectAgenda);
+
+  // Fila de botones, una sola línea
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex';
+  btnRow.style.gap = '8px';
+  btnRow.appendChild(btnSave);
+  btnRow.appendChild(btnAdmin);
+  wrapper.appendChild(btnRow);
+
+  /* ——— Insertar en tabla AFIP ——— */
   const filaCUIT = inputCUIT.closest('tr');
   const nuevaFila = document.createElement('tr');
   nuevaFila.innerHTML = `<th>Contacto guardado</th><td></td>`;
-  nuevaFila.querySelector('td').appendChild(contenedor);
+  nuevaFila.querySelector('td').appendChild(wrapper);
   filaCUIT.parentNode.insertBefore(nuevaFila, filaCUIT);
 
-  /* ---------- Utilidades de UI ---------- */
+  /* ——— Refrescar el <select> con la agenda ——— */
   function refreshSelect() {
     const agenda = getAgenda();
     selectAgenda.innerHTML =
@@ -61,27 +72,27 @@
     Object.values(agenda)
       .sort((a, b) => a.alias.localeCompare(b.alias))
       .forEach(({ cuit, alias }) => {
-        const opt = document.createElement('option');
-        opt.value = cuit;
-        opt.textContent = `${alias} (${cuit})`;
-        selectAgenda.appendChild(opt);
+        const o = document.createElement('option');
+        o.value = cuit;
+        o.textContent = `${alias} (${cuit})`;
+        selectAgenda.appendChild(o);
       });
   }
   refreshSelect();
 
-  /* ---------- Select: rellenar CUIT ---------- */
-  selectAgenda.addEventListener('change', function () {
-    const cuit = this.value;
+  /* ——— Al seleccionar un contacto ——— */
+  selectAgenda.addEventListener('change', () => {
+    const cuit = selectAgenda.value;
     if (!cuit) return;
     inputCUIT.value = cuit;
     inputCUIT.dispatchEvent(new Event('change', { bubbles: true }));
     inputCUIT.dispatchEvent(
       new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', bubbles: true })
     );
-    this.selectedIndex = 0;
+    selectAgenda.selectedIndex = 0;
   });
 
-  /* ---------- Botón Guardar ---------- */
+  /* ——— Guardar nuevo contacto ——— */
   btnSave.addEventListener('click', () => {
     const cuit = inputCUIT.value.trim();
     if (!cuit || cuit.length < 11) {
@@ -100,31 +111,34 @@
     };
     saveAgenda(agenda);
     refreshSelect();
-    alert(`Contacto “${alias}” guardado correctamente.`);
+    alert(`Contacto “${alias}” guardado.`);
   });
 
-  /* ---------- Modal de administración ---------- */
-  // 1) Inyectamos estilos mínimos
+  /* ——— Modal de administración ——— */
+  // Estilos mínimos
   const style = document.createElement('style');
   style.textContent = `
 #afipAgendaOverlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9999; display: flex;
-  justify-content: center; align-items: center; font-family: sans-serif;
+  position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
 }
 #afipAgendaModal {
-  background: #fff; padding: 20px 24px; border-radius: 6px; max-width: 600px; width: 90%;
-  max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  background: white; padding: 20px; border-radius: 6px;
+  max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
 }
+#afipAgendaModal h3 { margin-top: 0; font-size: 18px; }
 #afipAgendaModal table { width: 100%; border-collapse: collapse; }
-#afipAgendaModal th, #afipAgendaModal td { padding: 6px 8px; border-bottom: 1px solid #ddd; font-size: 13px; }
-#afipAgendaModal th { text-align: left; background: #f5f5f5; }
-.afipAgendaBtn { cursor: pointer; border: none; background: none; font-size: 14px; }
+#afipAgendaModal th, #afipAgendaModal td {
+  padding: 6px 8px; border-bottom: 1px solid #ddd; font-size: 13px;
+}
+#afipAgendaModal th { background: #f5f5f5; text-align: left; }
+.afipAgendaBtn { cursor: pointer; border: none; background: none; }
 .afipAgendaBtn.del { color: #d00; }
-#afipAgendaClose { float: right; margin-left: 8px; }
+#afipAgendaClose { float: right; font-size: 16px; }
 `;
   document.head.appendChild(style);
 
-  // 2) Generador del contenido del modal
   function buildModal() {
     const overlay = document.createElement('div');
     overlay.id = 'afipAgendaOverlay';
@@ -139,57 +153,58 @@
     closeBtn.title = 'Cerrar';
     closeBtn.onclick = () => overlay.remove();
 
-    const titulo = document.createElement('h3');
-    titulo.textContent = 'Agenda de CUITs';
-    titulo.style.margin = '0 0 12px 0';
-    titulo.style.fontSize = '18px';
+    const title = document.createElement('h3');
+    title.textContent = 'Administrar Agenda de CUITs';
 
-    const tabla = document.createElement('table');
+    const table = document.createElement('table');
     const thead = document.createElement('thead');
     thead.innerHTML = `<tr><th>Alias</th><th>CUIT</th><th>Razón social</th><th></th></tr>`;
     const tbody = document.createElement('tbody');
 
-    function renderRows() {
+    function render() {
       tbody.innerHTML = '';
-      const agenda = getAgenda();
-      const items = Object.values(agenda).sort((a, b) => a.alias.localeCompare(b.alias));
-      if (!items.length) {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td colspan="4" style="text-align:center;color:#666;">(Sin contactos guardados)</td>`;
-        tbody.appendChild(row);
+      const items = Object.values(getAgenda()).sort((a, b) =>
+        a.alias.localeCompare(b.alias)
+      );
+      if (items.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          `<td colspan="4" style="text-align:center;color:#666;">(sin contactos guardados)</td>`;
+        tbody.append(tr);
         return;
       }
-
-      for (const { cuit, alias, razon } of items) {
+      for (const { alias, cuit, razon } of items) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${alias}</td>
           <td>${cuit}</td>
           <td>${razon || ''}</td>
-          <td style="text-align:center;"><button class="afipAgendaBtn del" title="Borrar">🗑️</button></td>
+          <td style="text-align:center;">
+            <button class="afipAgendaBtn del" title="Borrar">🗑️</button>
+          </td>
         `;
         tr.querySelector('.del').onclick = () => {
-          if (confirm(`¿Borrar el contacto “${alias}” (${cuit})?`)) {
-            const agenda = getAgenda();
-            delete agenda[cuit];
-            saveAgenda(agenda);
+          if (confirm(`¿Borrar contacto “${alias}” (${cuit})?`)) {
+            const ag = getAgenda();
+            delete ag[cuit];
+            saveAgenda(ag);
             refreshSelect();
-            renderRows();
+            render();
           }
         };
-        tbody.appendChild(tr);
+        tbody.append(tr);
       }
     }
-    renderRows();
+    render();
 
-    tabla.append(thead, tbody);
-    modal.append(closeBtn, titulo, tabla);
-    overlay.appendChild(modal);
+    table.append(thead, tbody);
+    modal.append(closeBtn, title, table);
+    overlay.append(modal);
     return overlay;
   }
 
-  // 3) Botón Administrar
   btnAdmin.addEventListener('click', () => {
     document.body.appendChild(buildModal());
   });
+
 })();
