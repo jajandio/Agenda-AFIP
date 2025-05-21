@@ -1,6 +1,6 @@
 # Agenda-AFIP
 
-Un **userscript** para Tampermonkey que añade una pequeña agenda de receptores en la pantalla **RCEL – Factura C (Datos del Receptor, Paso 2)** de AFIP.  
+Un **userscript** para Tampermonkey que añade una pequeña agenda de receptores en la pantalla de **Datos del Receptor** de la facturación monotributista de AFIP.  
 
 - Guarda localmente **CUIT**, **Razón Social** y **Domicilio** junto con un **alias** definido por el usuario.  
 - Permite recuperar al instante los datos de un contacto guardado con solo seleccionar su alias.  
